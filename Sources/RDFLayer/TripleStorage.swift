@@ -97,6 +97,63 @@ actor TripleStorage {
         }
     }
 
+    /// Inserts multiple triples in a single transaction
+    /// This is more efficient than calling insert() multiple times
+    func insertBatch(_ triples: [RDFTriple]) async throws {
+        logger.debug("Inserting batch of \(triples.count) triples")
+
+        try await db.withTransaction { transaction in
+            var insertedCount: UInt64 = 0
+
+            for triple in triples {
+                // 1. Convert URIs to IDs
+                let subjectID = try await self.getOrCreateID(uri: triple.subject, transaction: transaction)
+                let predicateID = try await self.getOrCreateID(uri: triple.predicate, transaction: transaction)
+                let objectID = try await self.getOrCreateID(uri: triple.object, transaction: transaction)
+
+                // 2. Check if triple already exists (using SPO index)
+                let spoKey = TupleHelpers.encodeTripleKey(
+                    rootPrefix: self.rootPrefix,
+                    indexType: .spo,
+                    s: subjectID,
+                    p: predicateID,
+                    o: objectID
+                )
+
+                if let _ = try await transaction.getValue(for: spoKey) {
+                    // Triple already exists, skip to next
+                    self.logger.debug("Triple already exists, skipping: \(triple)")
+                    continue
+                }
+
+                // 3. Insert into all 4 indexes
+                for indexType in self.enabledIndexes {
+                    let key = TupleHelpers.encodeTripleKey(
+                        rootPrefix: self.rootPrefix,
+                        indexType: indexType,
+                        s: subjectID,
+                        p: predicateID,
+                        o: objectID
+                    )
+                    // Empty value (existence is what matters)
+                    transaction.setValue(FDB.Bytes(), for: key)
+                }
+
+                insertedCount += 1
+            }
+
+            // 4. Increment triple count by the number of actually inserted triples
+            if insertedCount > 0 {
+                let countKey = TupleHelpers.encodeTripleCountKey(rootPrefix: self.rootPrefix)
+                let increment = withUnsafeBytes(of: insertedCount.littleEndian) { Array($0) }
+                transaction.atomicOp(key: countKey, param: increment, mutationType: .add)
+                self.logger.debug("Batch inserted \(insertedCount) new triples")
+            } else {
+                self.logger.debug("No new triples inserted (all existed)")
+            }
+        }
+    }
+
     /// Deletes a triple from the store
     func delete(_ triple: RDFTriple) async throws {
         logger.debug("Deleting triple: \(triple)")
@@ -138,7 +195,9 @@ actor TripleStorage {
 
             // 4. Decrement triple count
             let countKey = TupleHelpers.encodeTripleCountKey(rootPrefix: self.rootPrefix)
-            let decrement = withUnsafeBytes(of: UInt64.max.littleEndian) { Array($0) } // -1 in two's complement
+            // Use Int64(-1) and convert to UInt64 using bitPattern for proper signed arithmetic
+            let decrementValue = UInt64(bitPattern: Int64(-1))
+            let decrement = withUnsafeBytes(of: decrementValue.littleEndian) { Array($0) }
             transaction.atomicOp(key: countKey, param: decrement, mutationType: .add)
 
             self.logger.debug("Triple deleted successfully")

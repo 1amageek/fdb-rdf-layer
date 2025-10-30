@@ -80,7 +80,8 @@ public actor RDFStore {
     /// Inserts multiple triples in batches
     ///
     /// This method automatically batches the inserts to respect FoundationDB's
-    /// 10MB transaction limit.
+    /// 10MB transaction limit. Each batch is processed in a single transaction
+    /// for optimal performance.
     ///
     /// - Parameter triples: The triples to insert
     /// - Throws: `RDFError` if any operation fails
@@ -88,15 +89,15 @@ public actor RDFStore {
         logger.info("Inserting batch of \(triples.count) triples")
 
         // Insert in batches of 1000 to avoid transaction size limits
+        // Each batch is processed in a single transaction for efficiency
         let batchSize = 1000
 
         for batchIndex in stride(from: 0, to: triples.count, by: batchSize) {
             let endIndex = min(batchIndex + batchSize, triples.count)
             let batch = Array(triples[batchIndex..<endIndex])
 
-            for triple in batch {
-                try await storage.insert(triple)
-            }
+            // Use the batch insert method which uses a single transaction
+            try await storage.insertBatch(batch)
 
             logger.debug("Inserted batch \(batchIndex/batchSize + 1)")
         }
