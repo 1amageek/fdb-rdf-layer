@@ -1,0 +1,68 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Swift Package Manager
+/.build
+/Packages
+Package.resolved
+.swiftpm/
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+!*.xcworkspace/contents.xcworkspacedata
+!*.xcworkspace/xcshareddata/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+# Build artifacts
+*.o
+*.lo
+*.la
+*.al
+.libs
+*.so
+*.so.*
+*.dylib
+*.a
+*.exe
+*.out
+*.app
+
+# FoundationDB
+*.fdb
+fdb.cluster
+foundationdb/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.netrc
+
+# Testing
+.test-results/
+*.profraw
+*.profdata
+
+# Documentation build
+/docs/.build/
+/docs/_build/
+
+# Environment
+.env
+.env.local
